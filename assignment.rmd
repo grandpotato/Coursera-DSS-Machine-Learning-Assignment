@@ -1,0 +1,79 @@
+---
+title: "Modelling effectiveness of exercise from accelerometer data"
+author: "Kevin Ho"
+date: "18 October 2016"
+output: pdf_document
+---
+```{r, echo=FALSE, include=FALSE}
+#knitr setup
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dev = 'pdf')
+```
+#Executive Summary
+The aim of the project is to predict the manner in which 6 participants did exercise. The effectiveness was measured to be
+
+sample size
+areas of further study
+
+#Overview
+One thing that people regularly do is quantify how *much* of a particular activity they do, but rarely quantify *how well they do it*. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+
+This study aimed to predict the manner in which the participants did the exercise how 
+
+```{r, include=FALSE}
+#Environment 
+R.Version()
+#Set Workspace 
+setwd("C:/Users/Kevin/Documents/Learning/Machine Learning/John Hopkins ML - Assignment")
+#Load Packages  
+require(ggplot2)
+require(caret)
+require(dplyr)
+#loading data
+training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+test <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+
+
+```{r, include=FALSE}
+#Set variables
+#mtcars predictor 'am' changed from numeric to factors so that the dataset is more interpretable.
+mtcars$am <- factor(mtcars$am)
+levels(mtcars$am) <- c("Automatic","Manual")
+```
+
+#Exploratory Data Analysis
+Lets have a look at a boxplot comparison MPG consumption of manual and automatic motor vehicles.
+```{r}
+ggplot(mtcars, aes(factor(am),mpg)) + geom_boxplot(aes(fill=factor(am)))
+```
+It initially appears that the fuel consumption for manual is lower than that for automatic each with means `r round(mean(subset(mtcars,am=="Automatic")$mpg),1)` and `r round(mean(subset(mtcars,am=="Manual")$mpg),1)`.
+
+However there may be confounders in the dataset that we need to correct for. First lets look and see if any predictors are superfluous.
+```{r}
+nearZeroVar(mtcars,saveMetrics = TRUE)
+```
+Looks like each variable has sufficient variablity in the dataset.
+
+Now we'll identify the top 3 predictors that explains the variablity in the data set. I could build models incrementally but adding the predictors with the largest coefficients. But the step function does this nicely for me.
+
+```{r}
+stepmodel <-step(lm(data = mtcars, mpg ~ .), trace=0)
+summary(stepmodel)
+```
+
+The resulting model is highly correlated with an R-squared value of 0.85. The coefficients bar the interept, all have a absolute t-value greater than 1.96 so they are all significant (P>0.05). There may be more features that could be included in the model but for now this is resonable.
+
+The model shows that for every 1000lb increase in weight there is a ~4mpg decrease in fuel economy. For every second of quartermile time increase the fuel economy increases by 1.2mmpg. Most importantly we can see that the change from automatic to manual increases the fuel economy by 2.9mpg. 
+
+Lastly lets have a look at the residuals to see if any other underlying trends exist in the plot
+```{r}
+par(mfrow=c(2,2))
+plot(stepmodel)
+```
+
+The residual plot is fairly random. Although there might be a slight quadaratic relationship. The linear Q-Q plot shows that the data is normally distributed.
+The scale location is fairly randomly spread so homoscedacity does not appear to be an issue.
+The leverage plot shows no points that severely affecting the regression.
+Looking at the residuals the model appears to be a reasonable fit.
+
