@@ -29,23 +29,63 @@ setwd("C:/Users/Kevin/Documents/Learning/Machine Learning/John Hopkins ML - Assi
 require(ggplot2)
 require(caret)
 require(dplyr)
-#loading data
-training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
-test <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+
 ```
 
+#Divide the data
+The training set is divided to a test and training the set. While the test set will be used as validation.
+
+Variables with more than 5% errors, or static participant data, in the training set will be removed from the dataset.
 
 ```{r, include=FALSE}
-#Set variables
-#mtcars predictor 'am' changed from numeric to factors so that the dataset is more interpretable.
-mtcars$am <- factor(mtcars$am)
-levels(mtcars$am) <- c("Automatic","Manual")
+#loading data
+training <- read.csv("./pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+validation <- read.csv("./pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+
+varErrorRate <- apply(is.na(training),2,sum)/nrow(training)
+
+training <- training[varErrorRate < .05]
+validation <- validation[varErrorRate < .05]
+
+#First 7 columns removed as they are not predictors.
+training <- training[,-c(1:7)]
+validation <- validation[,-c(1:7)]
+```
+
+And split training into a test and training set
+
+```{r}
+set.seed(19836)
+inTrain <- createDataPartition(y=training$classe, p= 0.7, list = FALSE)
+test <- training[-inTrain,]
+training <- training[inTrain,]
 ```
 
 #Exploratory Data Analysis
-Lets have a look at a boxplot comparison MPG consumption of manual and automatic motor vehicles.
+Lets have a look the distributions of our predictors.
 ```{r}
-ggplot(mtcars, aes(factor(am),mpg)) + geom_boxplot(aes(fill=factor(am)))
+
+# Create a function that plots the value of "classe" against the "y" value
+plotM<-function(l,index){
+  
+  df.temp<-training[training$classe == index,l]
+  hist(df.temp,xlab="Y Value",
+  main=paste("Value of key variable: ",toString(l)," and outcome ",index))
+  
+}
+
+# Create a grid to plot the different values of "a"
+par(mfrow=c(3,2))
+
+classe <- c("A","B","C","D","E")
+# Loop through each value of "a" and call the plotM function
+for (i in names(training)){
+    
+    for(j in classe) {
+        plotM(i,j)
+    }
+}
+
 ```
 It initially appears that the fuel consumption for manual is lower than that for automatic each with means `r round(mean(subset(mtcars,am=="Automatic")$mpg),1)` and `r round(mean(subset(mtcars,am=="Manual")$mpg),1)`.
 
