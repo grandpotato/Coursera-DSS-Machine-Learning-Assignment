@@ -2,118 +2,122 @@
 title: "Modelling effectiveness of exercise from accelerometer data"
 author: "Kevin Ho"
 date: "18 October 2016"
-output: pdf_document
+output: html_document
 ---
 ```{r, echo=FALSE, include=FALSE}
 #knitr setup
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(dev = 'pdf')
+#Set Workspace 
+setwd("C:/Users/Kevin/Documents/Learning/Machine Learning/John Hopkins ML - Assignment")
 ```
 #Executive Summary
-The aim of the project is to predict the manner in which 6 participants did exercise. The effectiveness was measured to be
-
-sample size
-areas of further study
+The aim of the project is to create a model from the Human Activity Recognition Dataset to predict the manner in which 6 participants did exercise and then measure its performance with a validation set of 20 observations. The model had a prediction accuracy of 99.39% over 15699 observations.
 
 #Overview
 One thing that people regularly do is quantify how *much* of a particular activity they do, but rarely quantify *how well they do it*. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
 
 This study aimed to predict the manner in which the participants did the exercise how 
 
-```{r, include=FALSE}
-#Environment 
-R.Version()
-#Set Workspace 
-setwd("C:/Users/Kevin/Documents/Learning/Machine Learning/John Hopkins ML - Assignment")
-#Load Packages  
+#Setup
+## Load Packages
+```{r, echo = TRUE, warning=FALSE, error=FALSE, message=FALSE}
 require(ggplot2)
 require(caret)
 require(dplyr)
-
+require(randomForest)
 ```
 
-#Divide the data
-The training set is divided to a test and training the set. While the test set will be used as validation.
+##Divide the data
+The training set is divided to a test and training the set. While the test data will be labelled as the predication data.
 
-Variables with more than 5% errors, or static participant data, in the training set will be removed from the dataset.
+Predictor variables with more than 5% errors and non-sensor data will be removed from the dataset.
+```{r}
+errorRateThreshold <- .05
 
-```{r, include=FALSE}
-#loading data
 training <- read.csv("./pml-training.csv", na.strings=c("NA","#DIV/0!",""))
-validation <- read.csv("./pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+predictionData <- read.csv("./pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
 
+#Evaluate the error rate per variable
 varErrorRate <- apply(is.na(training),2,sum)/nrow(training)
 
-training <- training[varErrorRate < .05]
-validation <- validation[varErrorRate < .05]
+#Removing variables below threshold
+training <- training[varErrorRate < errorRateThreshold]
+predictionData <- predictionData[varErrorRate < errorRateThreshold]
 
 #First 7 columns removed as they are not predictors.
 training <- training[,-c(1:7)]
-validation <- validation[,-c(1:7)]
+predictionData <- predictionData[,-c(1:7)]
 ```
 
 And split training into a test and training set
 
 ```{r}
 set.seed(19836)
-inTrain <- createDataPartition(y=training$classe, p= 0.7, list = FALSE)
+inTrain <- createDataPartition(y=training$classe, p= 0.8, list = FALSE)
 test <- training[-inTrain,]
 training <- training[inTrain,]
 ```
 
-#Exploratory Data Analysis
-Lets have a look the distributions of our predictors.
+#Model Selection
+Lets test our predictor variables for normality. We'll use the test sample as the training sample is too large for the shapiro-wilk test
 ```{r}
-
-# Create a function that plots the value of "classe" against the "y" value
-plotM<-function(l,index){
-  
-  df.temp<-training[training$classe == index,l]
-  hist(df.temp,xlab="Y Value",
-  main=paste("Value of key variable: ",toString(l)," and outcome ",index))
-  
-}
-
-# Create a grid to plot the different values of "a"
-par(mfrow=c(3,2))
-
-classe <- c("A","B","C","D","E")
-# Loop through each value of "a" and call the plotM function
-for (i in names(training)){
-    
-    for(j in classe) {
-        plotM(i,j)
+a <- vector('numeric')
+    for (i in 1:length(names(test))) {
+        if(is.numeric((test[,i]))) {
+            a <- c(a,shapiro.test(test[,i])$p.value)
+            shapiro.test(test[,i])$p.value
+        }
     }
+
+summary(a)
+```
+
+This is a good sign of noromality. And the following shows that all are variables are now of numeric type.
+
+```{r}
+table(sapply(training[1,],class))
+```
+
+#Modelling
+
+For ease of this analysis we'll use random forests so that the variables don't have to be transformed before building the model.
+
+```{r}
+model <- train(classe~., training, method="rf")
+
+prediction <- predict(model,newdata=test)
+
+ConMat <- confusionMatrix(prediction,test$classe)
+```
+
+With an accuracy of `r round(ConMat$overall[1],5)*100`%. Which lies within the 95% confidence interval. The model appears to be a good fit for the data.
+
+#Prediction of the validation data set
+Lets make our predictions and output it to a file
+```{r}
+predictions <- predict(model,newdata = predictionData)
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
 }
 
+pml_write_files(predictions)
 ```
-It initially appears that the fuel consumption for manual is lower than that for automatic each with means `r round(mean(subset(mtcars,am=="Automatic")$mpg),1)` and `r round(mean(subset(mtcars,am=="Manual")$mpg),1)`.
 
-However there may be confounders in the dataset that we need to correct for. First lets look and see if any predictors are superfluous.
+
+#Notes
+
+##Environment 
 ```{r}
-nearZeroVar(mtcars,saveMetrics = TRUE)
+R.version.string
+Sys.info()[1:3]
 ```
-Looks like each variable has sufficient variablity in the dataset.
-
-Now we'll identify the top 3 predictors that explains the variablity in the data set. I could build models incrementally but adding the predictors with the largest coefficients. But the step function does this nicely for me.
-
-```{r}
-stepmodel <-step(lm(data = mtcars, mpg ~ .), trace=0)
-summary(stepmodel)
-```
-
-The resulting model is highly correlated with an R-squared value of 0.85. The coefficients bar the interept, all have a absolute t-value greater than 1.96 so they are all significant (P>0.05). There may be more features that could be included in the model but for now this is resonable.
-
-The model shows that for every 1000lb increase in weight there is a ~4mpg decrease in fuel economy. For every second of quartermile time increase the fuel economy increases by 1.2mmpg. Most importantly we can see that the change from automatic to manual increases the fuel economy by 2.9mpg. 
-
-Lastly lets have a look at the residuals to see if any other underlying trends exist in the plot
-```{r}
-par(mfrow=c(2,2))
-plot(stepmodel)
-```
-
-The residual plot is fairly random. Although there might be a slight quadaratic relationship. The linear Q-Q plot shows that the data is normally distributed.
-The scale location is fairly randomly spread so homoscedacity does not appear to be an issue.
-The leverage plot shows no points that severely affecting the regression.
-Looking at the residuals the model appears to be a reasonable fit.
+##References
+1. [Groupware@LES Data from HAR](http://groupware.les.inf.puc-rio.br/har)
+2. [Diogo Auerlio's Machine learning assignment](https://rstudio-pubs-static.s3.amazonaws.com/29426_041c5ccb9a6a4bedb204e33144bb0ad4.html)
 
